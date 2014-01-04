@@ -11,3 +11,8 @@
 *.lai
 *.la
 *.a
+
+backup/*
+images/*
+*.mp4
+simulator
