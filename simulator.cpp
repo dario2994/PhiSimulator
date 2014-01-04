@@ -6,10 +6,8 @@
 #include <vector>
 using namespace std;
 
-const double dt=1e-5;
-const double G=0.5;
-const int imageSparsity=(1e5)/24;
-const int totalTime = imageSparsity*24*7;
+double G, dt;
+long long int ImageCapturingFrequency, Duration;
 
 const int width = 256;
 const int height = 256;
@@ -19,7 +17,14 @@ const double minX=-Z, maxX=Z, minY=-Z, maxY=Z;
 //dò per scontato che i rapporti siano uguali
 const double ratio=(maxX-minX)/(double)width; 
 
-char raw[height][(width/8)];
+vector < vector <char> > raw;
+
+void printPixel(int x, int y, bool remove){
+	if ( 0<=x and x<width and 0<=y and y<height) {
+		if( !remove )	raw[y][x>>3] |=	 ( 1 << (7-(x%8)) );
+		else 			raw[y][x>>3] &= !( 1 << (7-(x%8)) );
+	}
+}
 
 struct vec{
 	double x,y;
@@ -45,42 +50,18 @@ struct vec{
 	}
 };
 
-void printPixel(int x, int y, bool remove){
-	if ( 0<=x and x<width and 0<=y and y<height) {
-		if( !remove )	raw[y][x>>3] |=	 ( 1 << (7-(x%8)) );
-		else 			raw[y][x>>3] &= !( 1 << (7-(x%8)) );
-	}
-}
-
-void printCircle(vec s, double radius, bool remove) {
-	int x=(s.x-minX)/ratio;
-	int y=(s.y-minY)/ratio;
-	int r=radius/ratio;
-	for(int i=-r;i<=r;i++)for(int j=-r;j<=r;j++) {
-		if( i*i+j*j<=r*r ) printPixel(x+i,y+j,remove);
-	}
-}
-
-class corpo{
+class body{
 	public:
 		bool fixed;
 		double radius;
 		double mass;
 		vec s,v;
 		
-		void print() {
-			printCircle(s,radius,0);
-		}
-		
-		void remove() {
-			printCircle(s,radius,1);
-		}
-		
 		void applyForce(vec F) {
 			if(!fixed) v=v+(F*(dt/mass));
 		}
 		
-		void gravity(corpo A){
+		void gravity(body A){
 			vec r=A.s-s;
 			double d=r.norm();
 			applyForce( r*((G*mass*A.mass)/(d*d*d)) );
@@ -91,13 +72,22 @@ class corpo{
 		}
 };
 
-vector <corpo> sistema;
+
+vector <body> sistema;
+
+void printBody(body &A, bool remove) {
+	int x=(A.s.x-minX)/ratio;
+	int y=(A.s.y-minY)/ratio;
+	int r=A.radius/ratio;
+	for(int i=-r;i<=r;i++)for(int j=-r;j<=r;j++) {
+		if( i*i+j*j<=r*r ) printPixel(x+i,y+j,remove);
+	}
+}
 
 void saveImage() {
-	static int imageNum=0;
+	static long long int imageNum=0;
 	
-	
-	for(int j=0;j<(int)sistema.size();j++) sistema[j].print();
+	for(int j=0;j<(int)sistema.size();j++) printBody( sistema[j], 0 );
 	
 	stringstream numero;
 	numero << "00000" << imageNum;
@@ -111,42 +101,57 @@ void saveImage() {
 	
 	image.close();
 	
-	for(int j=0;j<(int)sistema.size();j++) sistema[j].remove();
+	for(int j=0;j<(int)sistema.size();j++) printBody( sistema[j], 1 );
 	
 	imageNum++;
 }
 
 void init() {
-	ifstream in("input.txt");
+	ifstream inB("input/bodies.txt");
 	int l;
-	in >> l;
+	inB >> l;
 	for(int i=0;i<l;i++) {
-		corpo N;
-		in >> N.mass >> N.radius >> N.fixed;
-		in >> N.s.x >> N.s.y;
-		in >> N.v.x >> N.v.y;
+		body N;
+		inB >> N.mass >> N.radius >> N.fixed;
+		inB >> N.s.x >> N.s.y;
+		inB >> N.v.x >> N.v.y;
 		sistema.push_back(N);
 	}
+	
+	inB.close();
+	
+	ifstream inE("input/environment.txt");
+	inE >> G;
+	inE >> dt;
+	inE >> ImageCapturingFrequency >> Duration;
+	
+	cout << G << " " << dt << " " << ImageCapturingFrequency << " " << Duration << "\n";
+	
+	inE.close();
+	
+	raw.resize(height);
+	for(int i=0;i<height;i++) raw[i].resize(width/8);
 }
 
 
 int main() {
+	
+	init();
+	
 	double ratio2=(maxY-minY)/(double) height;
 	assert( fabs( (ratio-ratio2)/ratio ) < 0.1 );
 	assert ( width%8 == 0 );
 	
-	init();
-	
 	
 	int l=sistema.size();
 	
-	for(int countSim=0;countSim<totalTime;countSim++) {
+	for(long long int countSim=0;countSim<Duration*ImageCapturingFrequency*24;countSim++) {
 		for(int i=0;i<l;i++) for(int j=0;j<l;j++){
 			if(i==j) continue;
 			sistema[i].gravity(sistema[j]);
 		}
 		for(int j=0;j<l;j++) sistema[j].move();
-		if( countSim%imageSparsity==0 ) {
+		if( countSim%ImageCapturingFrequency==0 ) {
 			saveImage();
 		}
 	}
